@@ -1,0 +1,11 @@
+name: Hello Actions
+
+on:
+  workflow_dispatch:
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Say hello
+        run: echo "Hello from Actions on ${{ github.repository }} @ ${{ github.ref }}"
