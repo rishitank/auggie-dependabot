@@ -13,7 +13,14 @@ permissions:
   pull-requests: write
 
 jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Echo context
+        run: |
+          echo "Event: ${{ github.event_name }} | Repo: ${{ github.repository }} | Ref: ${{ github.ref }}"
   test:
+    needs: preflight
     uses: rishitank/auggie-dependabot/.github/workflows/auggie.yml@main
     with:
       pr-labels: 'dependencies,auggie,self-test'

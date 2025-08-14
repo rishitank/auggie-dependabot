@@ -6,7 +6,7 @@ Purpose: Provide a reusable GitHub Actions workflow that runs the Auggie CLI on 
 - Attempt safe refactors to address breaking changes and prevent regressions
 - When a full migration is required, suggest a plan of attack and execute incremental automation steps where possible
 
-This repository contains a reusable workflow that other repositories can call via `workflow_call` (no copy/paste needed).
+This repository contains a reusable workflow that other repositories can call via `workflow_call` (no copy/paste needed). Pin to a stable tag like `@v1` in callers.
 
 ## Quick start (use in a target repository)
 
@@ -35,7 +35,7 @@ jobs:
 
 2) (Optional) Add an `.auggie.yml` to the target repo to customize behavior (examples below).
 
-3) Create the `OPENAI_API_KEY` secret in the target repo/org if Auggie requires it.
+3) Ensure the `AUGMENT_SESSION_AUTH` secret is present in the target repo/org. Auggie reads `GITHUB_API_TOKEN`; this workflow maps it from `GITHUB_TOKEN` automatically.
 
 ## What the workflow does
 - Checks out the caller repository
@@ -86,10 +86,11 @@ ignore:
 ## Developing this repo
 - Reusable workflow entrypoint: `.github/workflows/auggie.yml`
 - Tag this repository (e.g. `v1`) and reference it from callers as shown above.
-- Self-test workflow: `.github/workflows/self-test.yml` (uses the reusable workflow in-place; requires AUGMENT_SESSION_AUTH secret in this repo)
+- Self-test workflow: `.github/workflows/self-test.yml` (uses the reusable workflow in-place; requires AUGMENT_SESSION_AUTH secret in this repo; includes a preflight job for diagnostics)
 
 ## Notes
-- The Auggie CLI is published on npm as `auggie`. This repository’s reusable workflow installs it via `npm i -g auggie` or uses `npx auggie`.
+- The Auggie CLI is published on npm as `@augmentcode/auggie`. This workflow runs it via `npx -y @augmentcode/auggie`.
 - Provide `AUGMENT_SESSION_AUTH` in the caller repo/org secrets to enable Auggie’s authenticated operations.
+- Auggie expects `GITHUB_API_TOKEN`; this workflow maps `GITHUB_TOKEN` to it.
 - If your environment uses a different install method, adjust `.github/workflows/auggie.yml` accordingly.
 
