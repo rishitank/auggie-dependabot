@@ -51,8 +51,8 @@ jobs:
       - name: Install Auggie CLI (npm)
         run: |
           set -euo pipefail
-          npm i -g auggie || npm i -g auggie-cli
-          auggie --version || true
+          npm i -g @augmentcode/auggie
+          auggie --version || npx -y @augmentcode/auggie --version || true
 
       - name: Determine grouping arguments
         id: group
@@ -78,6 +78,8 @@ jobs:
           GROUP_ARGS='${{ steps.group.outputs.args }}'
 
           echo "Running Auggie with CONFIG=$CONFIG GROUP_ARGS=$GROUP_ARGS EXTRA=$EXTRA"
+          # Prefer npx invocation for scoped package
+          npx -y @augmentcode/auggie upgrade --config "$CONFIG" $GROUP_ARGS $EXTRA || \
           auggie upgrade --config "$CONFIG" $GROUP_ARGS $EXTRA || echo "Auggie CLI finished (non-fatal)"
 
       - name: Generate changelog (if supported)

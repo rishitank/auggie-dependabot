@@ -16,14 +16,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          echo "Trying: npx -y auggie --help"
-          if npx -y auggie --help | tee auggie-help.txt; then
-            echo "method=npx" >> $GITHUB_OUTPUT
+          echo "Trying: npx -y @augmentcode/auggie --help"
+          if npx -y @augmentcode/auggie --help | tee auggie-help.txt; then
+            echo "method=npx-scoped" >> $GITHUB_OUTPUT
           else
-            echo "Falling back to npm -g install"
-            npm i -g auggie || true
+            echo "Falling back to npm -g install of scoped package"
+            npm i -g @augmentcode/auggie || true
             auggie --help | tee auggie-help.txt || true
-            echo "method=npm-global" >> $GITHUB_OUTPUT
+            echo "method=npm-global-scoped" >> $GITHUB_OUTPUT
           fi
       - name: Upload help output
         uses: actions/upload-artifact@v4
