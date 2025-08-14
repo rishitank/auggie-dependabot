@@ -1,0 +1,161 @@
+name: Auggie Upgrades (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      pr-labels:
+        required: false
+        type: string
+        default: 'dependencies,auggie'
+      pr-reviewers:
+        required: false
+        type: string
+        default: ''
+      group-strategy:
+        required: false
+        type: string
+        default: 'auto'
+      auggie-config-path:
+        required: false
+        type: string
+        default: '.auggie.yml'
+      auggie-run-args:
+        required: false
+        type: string
+        default: ''
+    secrets:
+      GITHUB_TOKEN:
+        required: true
+      OPENAI_API_KEY:
+        required: false
+      AUGMENT_SESSION_AUTH:
+        required: true
+
+jobs:
+  run-auggie:
+    name: Run Auggie CLI
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out caller repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node (for CLI wrapper) and Python (polyglot helpers)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Auggie CLI (npm)
+        run: |
+          set -euo pipefail
+          npm i -g auggie || npm i -g auggie-cli
+          auggie --version || true
+
+      - name: Determine grouping arguments
+        id: group
+        shell: bash
+        run: |
+          GS='${{ inputs["group-strategy"] }}'
+          case "$GS" in
+            auto) echo "args=--group auto"   >> $GITHUB_OUTPUT ;;
+            ecosystem) echo "args=--group ecosystem" >> $GITHUB_OUTPUT ;;
+            none|*) echo "args=" >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Run Auggie (analyze + upgrade)
+        id: auggie
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          AUGMENT_SESSION_AUTH: ${{ secrets.AUGMENT_SESSION_AUTH }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONFIG='${{ inputs["auggie-config-path"] }}'
+          EXTRA='${{ inputs["auggie-run-args"] }}'
+          GROUP_ARGS='${{ steps.group.outputs.args }}'
+
+          echo "Running Auggie with CONFIG=$CONFIG GROUP_ARGS=$GROUP_ARGS EXTRA=$EXTRA"
+          auggie upgrade --config "$CONFIG" $GROUP_ARGS $EXTRA || echo "Auggie CLI finished (non-fatal)"
+
+      - name: Generate changelog (if supported)
+        id: changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Try Auggie-provided changelog; fall back to a simple summary
+          if auggie changelog --format markdown > .auggie-changelog.md 2>/dev/null; then
+            echo "path=.auggie-changelog.md" >> $GITHUB_OUTPUT
+          else
+            echo "Generating minimal change summary"
+            printf "# Upgrade Summary\n\n" > .auggie-changelog.md
+            git status --porcelain >> .auggie-changelog.md || true
+            echo "path=.auggie-changelog.md" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create or update PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BRANCH="auggie/upgrade-$(date -u +%Y%m%d)"
+          git config user.name "auggie-bot"
+          git config user.email "auggie-bot@users.noreply.github.com"
+
+          CHANGES=$(git status --porcelain)
+          if [ -z "$CHANGES" ]; then
+            echo "No changes to commit"
+            exit 0
+          fi
+
+          git checkout -b "$BRANCH" || git checkout "$BRANCH"
+          git add -A
+          git commit -m "auggie: automated dependency upgrades"
+          git push -u origin "$BRANCH" || true
+
+          # Determine default base branch for PR
+          BASE=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
+          echo "Base branch: $BASE"
+
+          TITLE="Auggie: Automated dependency upgrades"
+          PR_BODY_HEADER=$(cat <<'EOT'
+This PR was created by the Auggie upgrade workflow.
+
+- Detects and applies dependency updates across ecosystems
+- Attempts code refactors for breaking changes
+- If a full migration is needed, suggests a plan and incremental steps
+
+Changelog (auto-generated):
+EOT
+)
+          CHANGELOG_PATH='${{ steps.changelog.outputs.path }}'
+          if [ -f "$CHANGELOG_PATH" ]; then
+            PR_CHANGELOG=$(cat "$CHANGELOG_PATH")
+          else
+            PR_CHANGELOG="- (No detailed changelog available)"
+          fi
+          BODY="$PR_BODY_HEADER
+$PR_CHANGELOG"
+
+          # Try to create PR or update existing
+          gh pr create --title "$TITLE" --body "$BODY" --head "$BRANCH" --base "$BASE" || \
+          gh pr create --title "$TITLE" --body "$BODY" --head "$BRANCH" || true
+
+          # Apply labels and request reviewers, if provided
+          LABELS='${{ inputs["pr-labels"] }}'
+          REVIEWERS='${{ inputs["pr-reviewers"] }}'
+          if [ -n "$LABELS" ]; then
+            IFS=',' read -ra ARR <<< "$LABELS"
+            for l in "${ARR[@]}"; do gh pr edit --add-label "$l" || true; done
+          fi
+          if [ -n "$REVIEWERS" ]; then
+            IFS=',' read -ra ARR <<< "$REVIEWERS"
+            for r in "${ARR[@]}"; do gh pr edit --add-reviewer "$r" || true; done
+          fi
+

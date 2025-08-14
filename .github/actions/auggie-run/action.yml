@@ -1,0 +1,11 @@
+name: 'Auggie Run'
+description: 'Composite action to run the Auggie CLI with optional grouping and config'
+author: 'auggie-bot'
+runs:
+  using: 'composite'
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        echo "This is a placeholder composite action. Prefer using the reusable workflow .github/workflows/auggie.yml"
+
