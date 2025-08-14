@@ -43,7 +43,7 @@ jobs:
       - name: Set up Node (for CLI wrapper) and Python (polyglot helpers)
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -54,18 +54,8 @@ jobs:
           npm i -g @augmentcode/auggie
           auggie --version || npx -y @augmentcode/auggie --version || true
 
-      - name: Determine grouping arguments
-        id: group
-        shell: bash
-        run: |
-          GS='${{ inputs["group-strategy"] }}'
-          case "$GS" in
-            auto) echo "args=--group auto"   >> $GITHUB_OUTPUT ;;
-            ecosystem) echo "args=--group ecosystem" >> $GITHUB_OUTPUT ;;
-            none|*) echo "args=" >> $GITHUB_OUTPUT ;;
-          esac
 
-      - name: Run Auggie (analyze + upgrade)
+      - name: Run Auggie (automation mode)
         id: auggie
         env:
           # GitHub token used by gh CLI and also mapped to GITHUB_API_TOKEN for Auggie
@@ -77,20 +67,31 @@ jobs:
           set -euo pipefail
           CONFIG='${{ inputs["auggie-config-path"] }}'
           EXTRA='${{ inputs["auggie-run-args"] }}'
-          GROUP_ARGS='${{ steps.group.outputs.args }}'
 
-          echo "Running Auggie with CONFIG=$CONFIG GROUP_ARGS=$GROUP_ARGS EXTRA=$EXTRA"
-          # Prefer npx invocation for scoped package
-          npx -y @augmentcode/auggie upgrade --config "$CONFIG" $GROUP_ARGS $EXTRA || \
-          auggie upgrade --config "$CONFIG" $GROUP_ARGS $EXTRA || echo "Auggie CLI finished (non-fatal)"
+          # Create instruction for Auggie automation
+          cat > .auggie-instruction.md <<'EOT'
+You are Auggie, an AI upgrade agent.
+Task: Detect and apply dependency/version updates across all ecosystems in this repository. Where breaking changes are required, attempt safe code refactors/codemods to avoid regressions. Keep lockfiles in sync. If a full migration is required, output a clear migration plan with incremental steps.
 
-      - name: Generate changelog (if supported)
+Requirements:
+- Auto-detect ecosystems (npm/yarn/pnpm, pip/poetry, go, cargo, maven/gradle, actions, docker, etc.).
+- Prefer non-breaking upgrades; for breaking changes, update code and configs safely.
+- Do not delete unrelated files. Avoid destructive operations.
+- After changes, write a concise Markdown changelog to .auggie-changelog.md.
+- If a full migration is needed, write details to migration-plan.md.
+- Be verbose about what changed: packages, versions, code refactors.
+EOT
+
+          echo "Running Auggie in print mode with instruction file"
+          # Prefer npx invocation for the scoped package
+          npx -y @augmentcode/auggie --print --workspace-root . --instruction-file ./.auggie-instruction.md $EXTRA | tee .auggie-output.md || true
+
+      - name: Collect changelog
         id: changelog
         shell: bash
         run: |
           set -euo pipefail
-          # Try Auggie-provided changelog; fall back to a simple summary
-          if auggie changelog --format markdown > .auggie-changelog.md 2>/dev/null; then
+          if [ -f .auggie-changelog.md ]; then
             echo "path=.auggie-changelog.md" >> $GITHUB_OUTPUT
           else
             echo "Generating minimal change summary"
