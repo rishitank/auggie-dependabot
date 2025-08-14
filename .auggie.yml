@@ -1,0 +1,27 @@
+# Example Auggie configuration for callers
+# Repos can copy this file and tweak as needed
+
+upgradePolicy:
+  securityOnly: false
+  allowPrerelease: false
+  maxConcurrentPRs: 5
+
+# Ecosystem grouping
+# auto: let Auggie group related updates; ecosystem: group per ecosystem; none: separate
+grouping:
+  strategy: auto
+  groups:
+    - name: react-suite
+      match:
+        ecosystems: [npm, yarn, pnpm]
+        packages: [react, react-dom, @types/react]
+
+# Migration helpers
+migrations:
+  enableAutoRefactor: true
+  enableCodemods: true
+  codemods: []  # e.g., ['npx @codemod/cli transform ...']
+
+ignore:
+  packages: []
+

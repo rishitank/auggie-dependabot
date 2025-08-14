@@ -1,0 +1,33 @@
+name: Auggie CLI Help
+
+on:
+  workflow_dispatch:
+
+jobs:
+  help:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Show Auggie help via npx
+        id: help
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Trying: npx -y auggie --help"
+          if npx -y auggie --help | tee auggie-help.txt; then
+            echo "method=npx" >> $GITHUB_OUTPUT
+          else
+            echo "Falling back to npm -g install"
+            npm i -g auggie
+            auggie --help | tee auggie-help.txt
+            echo "method=npm-global" >> $GITHUB_OUTPUT
+          fi
+      - name: Upload help output
+        uses: actions/upload-artifact@v4
+        with:
+          name: auggie-help
+          path: auggie-help.txt
+

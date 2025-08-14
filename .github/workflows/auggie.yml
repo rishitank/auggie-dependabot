@@ -26,8 +26,6 @@ on:
     secrets:
       GITHUB_TOKEN:
         required: true
-      OPENAI_API_KEY:
-        required: false
       AUGMENT_SESSION_AUTH:
         required: true
 
@@ -71,7 +69,6 @@ jobs:
         id: auggie
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           AUGMENT_SESSION_AUTH: ${{ secrets.AUGMENT_SESSION_AUTH }}
         shell: bash
         run: |

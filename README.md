@@ -31,7 +31,6 @@ jobs:
       auggie-run-args: ''
     secrets:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       AUGMENT_SESSION_AUTH: ${{ secrets.AUGMENT_SESSION_AUTH }}
 ```
 
@@ -54,7 +53,6 @@ jobs:
 
 ## Secrets
 - `GITHUB_TOKEN`: write access token to open PRs (GitHub-provided token is sufficient for same-repo operations)
-- `OPENAI_API_KEY`: required if Auggie performs AI-driven refactors/migrations
 - `AUGMENT_SESSION_AUTH`: required to authenticate Auggie with Augment services. Store this value as a repository or organization secret and pass it through in the workflow `secrets` block.
 
 ## Example .auggie.yml (caller repo)
@@ -92,7 +90,7 @@ ignore:
 - Tag this repository (e.g. `v1`) and reference it from callers as shown above.
 
 ## Notes
-- The Auggie CLI is published on npm as `auggie`. This repository’s reusable workflow installs it via `npm i -g auggie`.
+- The Auggie CLI is published on npm as `auggie`. This repository’s reusable workflow installs it via `npm i -g auggie` or uses `npx auggie`.
 - Provide `AUGMENT_SESSION_AUTH` in the caller repo/org secrets to enable Auggie’s authenticated operations.
 - If your environment uses a different install method, adjust `.github/workflows/auggie.yml` accordingly.
 
