@@ -84,17 +84,17 @@ jobs:
 
           # Create instruction for Auggie automation
           cat > .auggie-instruction.md <<'EOT'
-You are Auggie, an AI upgrade agent.
-Task: Detect and apply dependency/version updates across all ecosystems in this repository. Where breaking changes are required, attempt safe code refactors/codemods to avoid regressions. Keep lockfiles in sync. If a full migration is required, output a clear migration plan with incremental steps.
+          You are Auggie, an AI upgrade agent.
+          Task: Detect and apply dependency/version updates across all ecosystems in this repository. Where breaking changes are required, attempt safe code refactors/codemods to avoid regressions. Keep lockfiles in sync. If a full migration is required, output a clear migration plan with incremental steps.
 
-Requirements:
-- Auto-detect ecosystems (npm/yarn/pnpm, pip/poetry, go, cargo, maven/gradle, actions, docker, etc.).
-- Prefer non-breaking upgrades; for breaking changes, update code and configs safely.
-- Do not delete unrelated files. Avoid destructive operations.
-- After changes, write a concise Markdown changelog to .auggie-changelog.md.
-- If a full migration is needed, write details to migration-plan.md.
-- Be verbose about what changed: packages, versions, code refactors.
-EOT
+          Requirements:
+          - Auto-detect ecosystems (npm/yarn/pnpm, pip/poetry, go, cargo, maven/gradle, actions, docker, etc.).
+          - Prefer non-breaking upgrades; for breaking changes, update code and configs safely.
+          - Do not delete unrelated files. Avoid destructive operations.
+          - After changes, write a concise Markdown changelog to .auggie-changelog.md.
+          - If a full migration is needed, write details to migration-plan.md.
+          - Be verbose about what changed: packages, versions, code refactors.
+          EOT
 
           echo "Running Auggie in print mode with instruction file"
           # Prefer npx invocation for the scoped package
