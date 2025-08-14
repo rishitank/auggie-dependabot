@@ -23,6 +23,10 @@ on:
         required: false
         type: string
         default: ''
+      dry-run:
+        required: false
+        type: string
+        default: 'false'
     secrets:
       GITHUB_TOKEN:
         required: true
@@ -47,6 +51,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
+      - name: Diagnostics (token + repo)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Event: ${{ github.event_name }} | Repo: ${{ github.repository }} | Ref: ${{ github.ref }}"
+          echo "gh auth status:" && gh auth status || true
+          echo "Viewer permission:" && gh repo view --json viewerPermission -q .viewerPermission || true
 
       - name: Install Auggie CLI (npm)
         run: |
@@ -100,12 +114,22 @@ EOT
             echo "path=.auggie-changelog.md" >> $GITHUB_OUTPUT
           fi
 
-      - name: Create or update PR
+      - name: Collect migration plan (optional)
+        id: mig
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f migration-plan.md ]; then
+            echo "path=migration-plan.md" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create or update PR (or dry-run)
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
+          DRY='${{ inputs["dry-run"] }}'
           BRANCH="auggie/upgrade-$(date -u +%Y%m%d)"
           git config user.name "auggie-bot"
           git config user.email "auggie-bot@users.noreply.github.com"
@@ -113,17 +137,19 @@ EOT
           CHANGES=$(git status --porcelain)
           if [ -z "$CHANGES" ]; then
             echo "No changes to commit"
-            exit 0
+            # In dry-run, still upload artifacts below
+          else
+            if [ "$DRY" != "true" ]; then
+              git checkout -b "$BRANCH" || git checkout "$BRANCH"
+              git add -A
+              git commit -m "auggie: automated dependency upgrades"
+              git push -u origin "$BRANCH" || true
+            fi
           fi
-
-          git checkout -b "$BRANCH" || git checkout "$BRANCH"
-          git add -A
-          git commit -m "auggie: automated dependency upgrades"
-          git push -u origin "$BRANCH" || true
 
           # Determine default base branch for PR
           BASE=$(gh repo view --json defaultBranchRef -q .defaultBranchRef.name)
-          echo "Base branch: $BASE"
+          echo "Base branch: $BASE | Dry-run: $DRY"
 
           TITLE="Auggie: Automated dependency upgrades"
           PR_BODY_HEADER=$(cat <<'EOT'
@@ -142,22 +168,45 @@ EOT
           else
             PR_CHANGELOG="- (No detailed changelog available)"
           fi
+
+          MIG_PATH='${{ steps.mig.outputs.path }}'
+          if [ -n "$MIG_PATH" ] && [ -f "$MIG_PATH" ]; then
+            PR_MIG=$(printf "\n\nMigration plan:\n\n%s" "$(cat "$MIG_PATH")")
+          else
+            PR_MIG=""
+          fi
+
           BODY="$PR_BODY_HEADER
-$PR_CHANGELOG"
+$PR_CHANGELOG
+$PR_MIG"
 
-          # Try to create PR or update existing
-          gh pr create --title "$TITLE" --body "$BODY" --head "$BRANCH" --base "$BASE" || \
-          gh pr create --title "$TITLE" --body "$BODY" --head "$BRANCH" || true
+          if [ "$DRY" = "true" ]; then
+            echo "Dry-run enabled: skipping PR creation. Uploading artifacts."
+          else
+            # Try to create PR or update existing
+            gh pr create --title "$TITLE" --body "$BODY" --head "$BRANCH" --base "$BASE" || \
+            gh pr create --title "$TITLE" --body "$BODY" --head "$BRANCH" || true
 
-          # Apply labels and request reviewers, if provided
-          LABELS='${{ inputs["pr-labels"] }}'
-          REVIEWERS='${{ inputs["pr-reviewers"] }}'
-          if [ -n "$LABELS" ]; then
-            IFS=',' read -ra ARR <<< "$LABELS"
-            for l in "${ARR[@]}"; do gh pr edit --add-label "$l" || true; done
+            # Apply labels and request reviewers, if provided
+            LABELS='${{ inputs["pr-labels"] }}'
+            REVIEWERS='${{ inputs["pr-reviewers"] }}'
+            if [ -n "$LABELS" ]; then
+              IFS=',' read -ra ARR <<< "$LABELS"
+              for l in "${ARR[@]}"; do gh pr edit --add-label "$l" || true; done
+            fi
+            if [ -n "$REVIEWERS" ]; then
+              IFS=',' read -ra ARR <<< "$REVIEWERS"
+              for r in "${ARR[@]}"; do gh pr edit --add-reviewer "$r" || true; done
+            fi
           fi
-          if [ -n "$REVIEWERS" ]; then
-            IFS=',' read -ra ARR <<< "$REVIEWERS"
-            for r in "${ARR[@]}"; do gh pr edit --add-reviewer "$r" || true; done
-          fi
+
+      - name: Upload artifacts (dry-run only)
+        if: ${{ inputs["dry-run"] == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: auggie-dry-run-output
+          path: |
+            .auggie-output.md
+            .auggie-changelog.md
+            migration-plan.md
 
