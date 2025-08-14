@@ -68,7 +68,9 @@ jobs:
       - name: Run Auggie (analyze + upgrade)
         id: auggie
         env:
+          # GitHub token used by gh CLI and also mapped to GITHUB_API_TOKEN for Auggie
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AUGMENT_SESSION_AUTH: ${{ secrets.AUGMENT_SESSION_AUTH }}
         shell: bash
         run: |
