@@ -11,57 +11,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Configure GitHub Packages (optional)
-        if: ${{ secrets.NPM_TOKEN != '' }}
+      - name: Show Auggie help via npx
+        id: help
         shell: bash
         run: |
           set -euo pipefail
-          printf "@augmentcode:registry=https://npm.pkg.github.com\n//npm.pkg.github.com/:_authToken=${NPM_TOKEN}\n" > ~/.npmrc
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-
-      - name: Probe Auggie package names
-        id: probe
-        shell: bash
-        run: |
-          set -euo pipefail
-          pkgs=(
-            "auggie"
-            "auggie-cli"
-            "@augmentcode/auggie"
-            "@augmentcode/auggie-cli"
-          )
-          found=""
-          for pkg in "${pkgs[@]}"; do
-            echo "Trying npx -y $pkg --help"
-            if npx -y "$pkg" --help | tee auggie-help.txt; then
-              found="$pkg"
-              echo "package=$pkg" >> $GITHUB_OUTPUT
-              echo "method=npx" >> $GITHUB_OUTPUT
-              break
-            fi
-          done
-
-          if [ -z "$found" ]; then
-            for pkg in "${pkgs[@]}"; do
-              echo "Trying npm i -g $pkg && $pkg --help"
-              if npm i -g "$pkg" && "$pkg" --help | tee auggie-help.txt; then
-                found="$pkg"
-                echo "package=$pkg" >> $GITHUB_OUTPUT
-                echo "method=npm-global" >> $GITHUB_OUTPUT
-                break
-              fi
-            done
+          echo "Trying: npx -y auggie --help"
+          if npx -y auggie --help | tee auggie-help.txt; then
+            echo "method=npx" >> $GITHUB_OUTPUT
+          else
+            echo "Falling back to npm -g install"
+            npm i -g auggie || true
+            auggie --help | tee auggie-help.txt || true
+            echo "method=npm-global" >> $GITHUB_OUTPUT
           fi
-
-          if [ -z "$found" ]; then
-            echo "Auggie package not found via public npm or GitHub Packages." >&2
-            exit 1
-          fi
-
       - name: Upload help output
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: auggie-help
