@@ -15,7 +15,7 @@ jobs:
           echo "Inline job reached. Event=${{ github.event_name }} Repo=${{ github.repository }} Ref=${{ github.ref }}"
   reuse:
     needs: inline
-    uses: rishitank/auggie-dependabot/.github/workflows/auggie.yml@v1
+    uses: rishitank/auggie-dependabot/.github/workflows/auggie.yml@main
     with:
       pr-labels: 'debug'
       auggie-config-path: '.auggie.yml'
