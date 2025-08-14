@@ -1,0 +1,20 @@
+name: Self Test (Auggie Reusable)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  test:
+    uses: rishitank/auggie-dependabot/.github/workflows/auggie.yml@main
+    with:
+      pr-labels: 'dependencies,auggie,self-test'
+      pr-reviewers: ''
+      group-strategy: 'auto'
+      auggie-config-path: '.auggie.yml'
+      auggie-run-args: '--compact'
+    secrets: inherit
+

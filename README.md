@@ -6,11 +6,11 @@ Purpose: Provide a reusable GitHub Actions workflow that runs the Auggie CLI on 
 - Attempt safe refactors to address breaking changes and prevent regressions
 - When a full migration is required, suggest a plan of attack and execute incremental automation steps where possible
 
-This repository contains a reusable workflow and a composite action that other repositories can call via `workflow_call`.
+This repository contains a reusable workflow that other repositories can call via `workflow_call` (no copy/paste needed).
 
 ## Quick start (use in a target repository)
 
-1) In your target repo, create a workflow, e.g. `.github/workflows/auggie-upgrades.yml`:
+1) In your target repo, create a minimal workflow that calls this reusable workflow (no copy/paste of logic):
 
 ```yaml
 name: Auggie Upgrades
@@ -22,13 +22,12 @@ on:
 
 jobs:
   upgrades:
-    uses: <your-org-or-user>/auggie-dependabot/.github/workflows/auggie.yml@v1
+    uses: rishitank/auggie-dependabot/.github/workflows/auggie.yml@v1
     with:
       pr-labels: 'dependencies,auggie'
       pr-reviewers: ''
-      group-strategy: 'auto'        # auto|none|ecosystem
       auggie-config-path: '.auggie.yml'
-      auggie-run-args: ''
+      auggie-run-args: '--compact'
     secrets:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       AUGMENT_SESSION_AUTH: ${{ secrets.AUGMENT_SESSION_AUTH }}
@@ -85,9 +84,9 @@ ignore:
 ```
 
 ## Developing this repo
-- Reusable workflow: `.github/workflows/auggie.yml`
-- Composite action runner: `.github/actions/auggie-run`
+- Reusable workflow entrypoint: `.github/workflows/auggie.yml`
 - Tag this repository (e.g. `v1`) and reference it from callers as shown above.
+- Self-test workflow: `.github/workflows/self-test.yml` (uses the reusable workflow in-place; requires AUGMENT_SESSION_AUTH secret in this repo)
 
 ## Notes
 - The Auggie CLI is published on npm as `auggie`. This repository’s reusable workflow installs it via `npm i -g auggie` or uses `npx auggie`.
