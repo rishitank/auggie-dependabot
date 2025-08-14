@@ -2,6 +2,11 @@ name: Self Test (Auggie Reusable)
 
 on:
   workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Run without committing/pushing or opening PR; upload artifacts only'
+        required: false
+        default: 'true'
 
 permissions:
   contents: write
@@ -13,8 +18,8 @@ jobs:
     with:
       pr-labels: 'dependencies,auggie,self-test'
       pr-reviewers: ''
-      group-strategy: 'auto'
       auggie-config-path: '.auggie.yml'
       auggie-run-args: '--compact'
+      dry-run: ${{ inputs.dry-run }}
     secrets: inherit
 
