@@ -62,8 +62,10 @@ jobs:
         run: |
           set -euo pipefail
           echo "Event: ${{ github.event_name }} | Repo: ${{ github.repository }} | Ref: ${{ github.ref }}"
-          echo "gh auth status:" && gh auth status || true
-          echo "Viewer permission:" && gh repo view --json viewerPermission -q .viewerPermission || true
+          echo "gh auth status:"
+          gh auth status || true
+          echo "Viewer permission:"
+          gh repo view --json viewerPermission -q .viewerPermission || true
 
       - name: Install Auggie CLI (npm)
         run: |
