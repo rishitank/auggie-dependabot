@@ -46,6 +46,10 @@ jobs:
     steps:
       - name: Check out caller repo
         uses: actions/checkout@v4
+        with:
+          # Same token as gh below, so `git push` also uses a caller-supplied
+          # token when one is passed.
+          token: ${{ secrets.token || github.token }}
 
       - name: Set up Node (for CLI wrapper) and Python (polyglot helpers)
         uses: actions/setup-node@v4
@@ -58,10 +62,13 @@ jobs:
       - name: Diagnostics (token + repo)
         env:
           GH_TOKEN: ${{ secrets.token || github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
         shell: bash
         run: |
           set -euo pipefail
-          echo "Event: ${{ github.event_name }} | Repo: ${{ github.repository }} | Ref: ${{ github.ref }}"
+          echo "Event: $EVENT_NAME | Repo: $REPO | Ref: $REF"
           echo "gh auth status:"
           gh auth status || true
           echo "Viewer permission:"
@@ -81,6 +88,9 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.token || github.token }}
           GITHUB_API_TOKEN: ${{ secrets.token || github.token }}
           AUGMENT_SESSION_AUTH: ${{ secrets.AUGMENT_SESSION_AUTH }}
+          # Inputs reach the script as environment variables, never as
+          # expression text spliced into the script source.
+          AUGGIE_RUN_ARGS: ${{ inputs['auggie-run-args'] }}
           INSTRUCTION: |
             You are Auggie, an AI upgrade agent.
             Task: Detect and apply dependency/version updates across all ecosystems in this repository. Where breaking changes are required, attempt safe code refactors/codemods to avoid regressions. Keep lockfiles in sync. If a full migration is required, output a clear migration plan with incremental steps.
@@ -97,7 +107,7 @@ jobs:
         run: |
           set -euo pipefail
           # Note: auggie-config-path is accepted but not passed to the CLI yet.
-          read -ra EXTRA <<< '${{ inputs['auggie-run-args'] }}'
+          read -ra EXTRA <<< "$AUGGIE_RUN_ARGS"
 
           # Create instruction for Auggie automation (using env INSTRUCTION YAML block)
           printf "%s\n" "$INSTRUCTION" > .auggie-instruction.md
@@ -132,10 +142,14 @@ jobs:
       - name: Create or update PR (or dry-run)
         env:
           GH_TOKEN: ${{ secrets.token || github.token }}
+          DRY: ${{ inputs['dry-run'] }}
+          LABELS: ${{ inputs['pr-labels'] }}
+          REVIEWERS: ${{ inputs['pr-reviewers'] }}
+          CHANGELOG_PATH: ${{ steps.changelog.outputs.path }}
+          MIG_PATH: ${{ steps.mig.outputs.path }}
         shell: bash
         run: |
           set -euo pipefail
-          DRY='${{ inputs['dry-run'] }}'
           BRANCH="auggie/upgrade-$(date -u +%Y%m%d)"
           git config user.name "auggie-bot"
           git config user.email "auggie-bot@users.noreply.github.com"
@@ -168,14 +182,12 @@ jobs:
           Changelog (auto-generated):
           EOT
           )
-          CHANGELOG_PATH='${{ steps.changelog.outputs.path }}'
           if [ -f "$CHANGELOG_PATH" ]; then
             PR_CHANGELOG=$(cat "$CHANGELOG_PATH")
           else
             PR_CHANGELOG="- (No detailed changelog available)"
           fi
 
-          MIG_PATH='${{ steps.mig.outputs.path }}'
           if [ -n "$MIG_PATH" ] && [ -f "$MIG_PATH" ]; then
             PR_MIG=$(printf "\n\nMigration plan:\n\n%s" "$(cat "$MIG_PATH")")
           else
@@ -194,8 +206,6 @@ jobs:
             gh pr create --title "$TITLE" --body "$BODY" --head "$BRANCH" || true
 
             # Apply labels and request reviewers, if provided
-            LABELS='${{ inputs['pr-labels'] }}'
-            REVIEWERS='${{ inputs['pr-reviewers'] }}'
             if [ -n "$LABELS" ]; then
               IFS=',' read -ra ARR <<< "$LABELS"
               for l in "${ARR[@]}"; do gh pr edit --add-label "$l" || true; done
