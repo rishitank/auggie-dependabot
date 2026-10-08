@@ -28,8 +28,11 @@ on:
         type: string
         default: 'false'
     secrets:
-      GITHUB_TOKEN:
-        required: true
+      # GITHUB_TOKEN is a reserved name: declaring it made every call fail
+      # before a job started. Callers may pass a token with more scope as
+      # `token`; without one, the run's own GITHUB_TOKEN is used.
+      token:
+        required: false
       AUGMENT_SESSION_AUTH:
         required: true
 
@@ -43,6 +46,10 @@ jobs:
     steps:
       - name: Check out caller repo
         uses: actions/checkout@v4
+        with:
+          # Same token as gh below, so `git push` also uses a caller-supplied
+          # token when one is passed.
+          token: ${{ secrets.token || github.token }}
 
       - name: Set up Node (for CLI wrapper) and Python (polyglot helpers)
         uses: actions/setup-node@v4
@@ -54,13 +61,18 @@ jobs:
 
       - name: Diagnostics (token + repo)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.token || github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          REPO: ${{ github.repository }}
+          REF: ${{ github.ref }}
         shell: bash
         run: |
           set -euo pipefail
-          echo "Event: ${{ github.event_name }} | Repo: ${{ github.repository }} | Ref: ${{ github.ref }}"
-          echo "gh auth status:" && gh auth status || true
-          echo "Viewer permission:" && gh repo view --json viewerPermission -q .viewerPermission || true
+          echo "Event: $EVENT_NAME | Repo: $REPO | Ref: $REF"
+          echo "gh auth status:"
+          gh auth status || true
+          echo "Viewer permission:"
+          gh repo view --json viewerPermission -q .viewerPermission || true
 
       - name: Install Auggie CLI (npm)
         run: |
@@ -73,9 +85,12 @@ jobs:
         id: auggie
         env:
           # GitHub token used by gh CLI and also mapped to GITHUB_API_TOKEN for Auggie
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.token || github.token }}
+          GITHUB_API_TOKEN: ${{ secrets.token || github.token }}
           AUGMENT_SESSION_AUTH: ${{ secrets.AUGMENT_SESSION_AUTH }}
+          # Inputs reach the script as environment variables, never as
+          # expression text spliced into the script source.
+          AUGGIE_RUN_ARGS: ${{ inputs['auggie-run-args'] }}
           INSTRUCTION: |
             You are Auggie, an AI upgrade agent.
             Task: Detect and apply dependency/version updates across all ecosystems in this repository. Where breaking changes are required, attempt safe code refactors/codemods to avoid regressions. Keep lockfiles in sync. If a full migration is required, output a clear migration plan with incremental steps.
@@ -91,15 +106,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          CONFIG='${{ inputs["auggie-config-path"] }}'
-          EXTRA='${{ inputs["auggie-run-args"] }}'
+          # Note: auggie-config-path is accepted but not passed to the CLI yet.
+          read -ra EXTRA <<< "$AUGGIE_RUN_ARGS"
 
           # Create instruction for Auggie automation (using env INSTRUCTION YAML block)
           printf "%s\n" "$INSTRUCTION" > .auggie-instruction.md
 
           echo "Running Auggie in print mode with instruction file"
           # Prefer npx invocation for the scoped package
-          npx -y @augmentcode/auggie --print --workspace-root . --instruction-file ./.auggie-instruction.md $EXTRA | tee .auggie-output.md || true
+          npx -y @augmentcode/auggie --print --workspace-root . --instruction-file ./.auggie-instruction.md "${EXTRA[@]}" | tee .auggie-output.md || true
 
       - name: Collect changelog
         id: changelog
@@ -107,12 +122,12 @@ jobs:
         run: |
           set -euo pipefail
           if [ -f .auggie-changelog.md ]; then
-            echo "path=.auggie-changelog.md" >> $GITHUB_OUTPUT
+            echo "path=.auggie-changelog.md" >> "$GITHUB_OUTPUT"
           else
             echo "Generating minimal change summary"
             printf "# Upgrade Summary\n\n" > .auggie-changelog.md
             git status --porcelain >> .auggie-changelog.md || true
-            echo "path=.auggie-changelog.md" >> $GITHUB_OUTPUT
+            echo "path=.auggie-changelog.md" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Collect migration plan (optional)
@@ -121,16 +136,20 @@ jobs:
         run: |
           set -euo pipefail
           if [ -f migration-plan.md ]; then
-            echo "path=migration-plan.md" >> $GITHUB_OUTPUT
+            echo "path=migration-plan.md" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Create or update PR (or dry-run)
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.token || github.token }}
+          DRY: ${{ inputs['dry-run'] }}
+          LABELS: ${{ inputs['pr-labels'] }}
+          REVIEWERS: ${{ inputs['pr-reviewers'] }}
+          CHANGELOG_PATH: ${{ steps.changelog.outputs.path }}
+          MIG_PATH: ${{ steps.mig.outputs.path }}
         shell: bash
         run: |
           set -euo pipefail
-          DRY='${{ inputs["dry-run"] }}'
           BRANCH="auggie/upgrade-$(date -u +%Y%m%d)"
           git config user.name "auggie-bot"
           git config user.email "auggie-bot@users.noreply.github.com"
@@ -154,23 +173,21 @@ jobs:
 
           TITLE="Auggie: Automated dependency upgrades"
           PR_BODY_HEADER=$(cat <<'EOT'
-This PR was created by the Auggie upgrade workflow.
+          This PR was created by the Auggie upgrade workflow.
 
-- Detects and applies dependency updates across ecosystems
-- Attempts code refactors for breaking changes
-- If a full migration is needed, suggests a plan and incremental steps
+          - Detects and applies dependency updates across ecosystems
+          - Attempts code refactors for breaking changes
+          - If a full migration is needed, suggests a plan and incremental steps
 
-Changelog (auto-generated):
-EOT
-)
-          CHANGELOG_PATH='${{ steps.changelog.outputs.path }}'
+          Changelog (auto-generated):
+          EOT
+          )
           if [ -f "$CHANGELOG_PATH" ]; then
             PR_CHANGELOG=$(cat "$CHANGELOG_PATH")
           else
             PR_CHANGELOG="- (No detailed changelog available)"
           fi
 
-          MIG_PATH='${{ steps.mig.outputs.path }}'
           if [ -n "$MIG_PATH" ] && [ -f "$MIG_PATH" ]; then
             PR_MIG=$(printf "\n\nMigration plan:\n\n%s" "$(cat "$MIG_PATH")")
           else
@@ -178,8 +195,8 @@ EOT
           fi
 
           BODY="$PR_BODY_HEADER
-$PR_CHANGELOG
-$PR_MIG"
+          $PR_CHANGELOG
+          $PR_MIG"
 
           if [ "$DRY" = "true" ]; then
             echo "Dry-run enabled: skipping PR creation. Uploading artifacts."
@@ -189,8 +206,6 @@ $PR_MIG"
             gh pr create --title "$TITLE" --body "$BODY" --head "$BRANCH" || true
 
             # Apply labels and request reviewers, if provided
-            LABELS='${{ inputs["pr-labels"] }}'
-            REVIEWERS='${{ inputs["pr-reviewers"] }}'
             if [ -n "$LABELS" ]; then
               IFS=',' read -ra ARR <<< "$LABELS"
               for l in "${ARR[@]}"; do gh pr edit --add-label "$l" || true; done
@@ -202,7 +217,7 @@ $PR_MIG"
           fi
 
       - name: Upload artifacts (dry-run only)
-        if: ${{ inputs["dry-run"] == 'true' }}
+        if: ${{ inputs['dry-run'] == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: auggie-dry-run-output

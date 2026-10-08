@@ -15,6 +15,11 @@ jobs:
           echo "Inline job reached. Event=${{ github.event_name }} Repo=${{ github.repository }} Ref=${{ github.ref }}"
   reuse:
     needs: inline
+    # The called job asks for contents/pull-requests write; a caller's grant
+    # is the ceiling, so with only `contents: read` the run was rejected.
+    permissions:
+      contents: write
+      pull-requests: write
     uses: rishitank/auggie-dependabot/.github/workflows/auggie.yml@main
     with:
       pr-labels: 'debug'
