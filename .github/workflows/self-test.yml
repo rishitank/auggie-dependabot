@@ -21,7 +21,7 @@ jobs:
           echo "Event: ${{ github.event_name }} | Repo: ${{ github.repository }} | Ref: ${{ github.ref }}"
   test:
     needs: preflight
-    uses: rishitank/auggie-dependabot/.github/workflows/auggie.yml@main
+    uses: rishitank/auggie-dependabot/.github/workflows/auggie.yml@65e56d5f98cab4523e0fd42a7572c288ba91495b # main
     with:
       pr-labels: 'dependencies,auggie,self-test'
       pr-reviewers: ''
