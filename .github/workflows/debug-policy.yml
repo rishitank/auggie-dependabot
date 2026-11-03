@@ -20,7 +20,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    uses: rishitank/auggie-dependabot/.github/workflows/auggie.yml@9d91754d238c010c18d5f60d789a613b9ea5e4f1 # main
+    uses: rishitank/auggie-dependabot/.github/workflows/auggie.yml@e9b315cb1cad25eedb8b048737410a8ff5431393 # main
     with:
       pr-labels: 'debug'
       auggie-config-path: '.auggie.yml'
